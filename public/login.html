@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Burn After Reading - Login</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f172a; margin: 0; height: 100vh;
+           display: flex; justify-content: center; align-items: center; }
+    .card { background: #fff; padding: 32px; border-radius: 12px; width: 320px; }
+    h2 { margin: 0 0 4px; } p.sub { margin: 0 0 16px; color: #6b7280; font-size: 14px; }
+    input { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; }
+    button { width: 100%; padding: 10px; margin-top: 8px; border: 0; border-radius: 6px;
+             font-size: 15px; cursor: pointer; }
+    #login { background: #ea580c; color: #fff; }
+    #register { background: #e5e7eb; }
+    #msg { min-height: 20px; font-size: 14px; color: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔥 Burn After Reading</h2>
+    <p class="sub">Messages vanish 15 seconds after they're read.</p>
+    <input id="u" placeholder="Username" autocomplete="username">
+    <input id="p" type="password" placeholder="Password (min 6 characters)" autocomplete="current-password">
+    <div id="msg"></div>
+    <button id="login">Log in</button>
+    <button id="register">Create account</button>
+  </div>
+
+  <script>
+  const msg = document.getElementById("msg");
+  const show = (t) => { msg.textContent = t; };
+
+  function creds() {
+    return JSON.stringify({
+      username: document.getElementById("u").value.trim(),
+      password: document.getElementById("p").value,
+    });
+  }
+
+  async function call(url) {
+    try {
+      return await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: creds(),
+      });
+    } catch (e) {
+      show("Cannot reach the server. Is it running on port 3000?");
+      return null;
+    }
+  }
+
+  async function doLogin() {
+    show("Logging in...");
+    const r = await call("/api/login");
+    if (!r) return;
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return show(data.error || "Login failed (status " + r.status + ")");
+    sessionStorage.setItem("token", data.token);
+    sessionStorage.setItem("username", data.username);
+    location.href = "/chat.html";
+  }
+
+  async function doRegister() {
+    show("Creating account...");
+    const r = await call("/api/register");
+    if (!r) return;
+    if (r.status === 201) return doLogin();
+    const data = await r.json().catch(() => ({}));
+    show(data.error || "Could not register (status " + r.status + ")");
+  }
+
+  document.getElementById("login").addEventListener("click", doLogin);
+  document.getElementById("register").addEventListener("click", doRegister);
+</script>
+</body>
+</html>

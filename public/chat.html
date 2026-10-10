@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Burn After Reading - VIP Room</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; height: 100vh; display: flex;
+           flex-direction: column; background: #f3f4f6; }
+    header { background: #0f172a; color: #fff; padding: 12px 20px; display: flex;
+             justify-content: space-between; align-items: center; }
+    header small { color: #94a3b8; }
+    header button { background: #334155; color: #fff; border: 0; padding: 6px 12px;
+                    border-radius: 6px; cursor: pointer; }
+    #join { margin: auto; background: #fff; padding: 28px; border-radius: 12px; width: 320px; }
+    #join input { width: 100%; padding: 10px; margin: 8px 0; }
+    #join button { width: 100%; padding: 10px; background: #ea580c; color: #fff;
+                   border: 0; border-radius: 6px; cursor: pointer; }
+    #joinErr { color: #dc2626; min-height: 20px; font-size: 14px; }
+    #chat { display: none; flex: 1; flex-direction: column; min-height: 0; }
+    #log { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex;
+           flex-direction: column; gap: 8px; }
+    .msg { max-width: 70%; padding: 8px 12px; border-radius: 12px; word-wrap: break-word;
+           transition: opacity .4s, transform .4s; }
+    .msg .who { font-size: 12px; font-weight: bold; margin-bottom: 2px; }
+    .msg .timer { font-size: 12px; margin-top: 4px; font-weight: bold; }
+    .mine   { align-self: flex-end;   background: #2563eb; color: #fff; }
+    .theirs { align-self: flex-start; background: #fff; color: #111827;
+              box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+    .mine .timer { color: #fde68a; } .theirs .timer { color: #dc2626; }
+    .burning { outline: 2px solid #f97316; }
+    .gone { opacity: 0; transform: scale(.9); }
+    form { display: flex; gap: 8px; padding: 12px 20px; background: #fff; }
+    form input { flex: 1; padding: 10px; font-size: 15px; }
+    form button { padding: 10px 20px; background: #2563eb; color: #fff; border: 0;
+                  border-radius: 6px; cursor: pointer; }
+    #err { color: #dc2626; font-size: 13px; padding: 0 20px; min-height: 18px; background: #fff; }
+  </style>
+</head>
+<body>
+  <header>
+    <div><b>🔥 VIP Room</b> <small id="online"></small></div>
+    <div><span id="me"></span> <button id="logout">Log out</button></div>
+  </header>
+
+  <div id="join">
+    <h3>Join the VIP room</h3>
+    <input id="code" placeholder="Invite code">
+    <div id="joinErr"></div>
+    <button id="joinBtn">Join</button>
+  </div>
+
+  <div id="chat">
+    <div id="log"></div>
+    <div id="err"></div>
+    <form id="form">
+      <input id="text" maxlength="500" placeholder="Type a message..." autocomplete="off">
+      <button>Send</button>
+    </form>
+  </div>
+
+  <script>
+    const token = sessionStorage.getItem("token");
+    const me = sessionStorage.getItem("username");
+    if (!token) location.href = "/login.html";
+    document.getElementById("me").textContent = "Signed in as " + me;
+
+    const $ = (id) => document.getElementById(id);
+    const socket = io({ auth: { token } });
+    const unread = new Set();   // ids from others we haven't marked as read yet
+
+    socket.on("connect_error", () => { sessionStorage.clear(); location.href = "/login.html"; });
+
+    // ---- join ----
+    $("joinBtn").onclick = () =>
+      socket.emit("room:join", { room: "vip", inviteCode: $("code").value.trim() });
+    $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("joinBtn").click(); });
+    socket.on("room:denied", (m) => { $("joinErr").textContent = m; });
+
+    socket.on("room:history", (rows) => {
+      $("join").style.display = "none";
+      $("chat").style.display = "flex";
+      $("log").innerHTML = "";
+      rows.forEach(addMessage);
+      scrollDown();
+    });
+
+    // ---- rendering ----
+    function addMessage(m) {
+      const mine = m.sender === me;
+      const el = document.createElement("div");
+      el.className = "msg " + (mine ? "mine" : "theirs");
+      el.id = "m" + m.id;
+
+      const who = document.createElement("div");
+      who.className = "who";
+      who.textContent = mine ? "You" : m.sender;     // textContent = safe from HTML injection
+
+      const body = document.createElement("div");
+      body.textContent = m.body;
+
+      const timer = document.createElement("div");
+      timer.className = "timer";
+
+      el.append(who, body, timer);
+      $("log").appendChild(el);
+
+      if (m.burn_at) startCountdown(m.id, m.burn_at);
+      if (!mine) { unread.add(String(m.id)); markReadIfVisible(); }
+    }
+
+    function startCountdown(id, burnAt) {
+      const el = $("m" + id);
+      if (!el) return;
+      el.dataset.burn = new Date(burnAt).getTime();
+      el.classList.add("burning");
+    }
+
+    setInterval(() => {
+      document.querySelectorAll(".msg[data-burn]").forEach((el) => {
+        const left = Math.min(15, Math.max(0, Math.ceil((el.dataset.burn - Date.now()) / 1000)));
+        el.querySelector(".timer").textContent = "🔥 burning in " + left + "s";
+      });
+    }, 250);
+
+    function scrollDown() { const l = $("log"); l.scrollTop = l.scrollHeight; }
+
+    // ---- read receipts: only when the tab is actually visible ----
+    function markReadIfVisible() {
+      if (document.visibilityState !== "visible") return;
+      unread.forEach((id) => socket.emit("message:read", { id }));
+      unread.clear();
+    }
+    document.addEventListener("visibilitychange", markReadIfVisible);
+
+    // ---- live events ----
+    socket.on("message:new", (m) => { addMessage(m); scrollDown(); });
+    socket.on("message:burning", (m) => startCountdown(m.id, m.burn_at));
+    socket.on("message:burned", (m) => {
+      const el = $("m" + m.id);
+      if (!el) return;
+      el.classList.add("gone");
+      setTimeout(() => el.remove(), 400);
+    });
+    socket.on("presence:update", (names) => {
+      $("online").textContent = "Online: " + names.join(", ");
+    });
+    socket.on("error:msg", (t) => {
+      $("err").textContent = t;
+      setTimeout(() => ($("err").textContent = ""), 2500);
+    });
+
+    // ---- sending ----
+    $("form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const body = $("text").value.trim();
+      if (!body) return;
+      socket.emit("message:send", { body });
+      $("text").value = "";
+    });
+
+    $("logout").onclick = () => { sessionStorage.clear(); location.href = "/login.html"; };
+  </script>
+</body>
+</html>
