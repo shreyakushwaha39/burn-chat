@@ -18,6 +18,7 @@ const MAX_LEN = 500;
 
 app.use(express.json({ limit: "10kb" }));
 app.use(express.static(path.join(__dirname, "../public")));
+app.get("/", (req, res) => res.redirect("/login.html"));
 
 // ---------- REST: register + login ----------
 app.post("/api/register", async (req, res) => {
