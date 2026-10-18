@@ -87,7 +87,6 @@ burn-chat/
 | | |
 |---|---|
 | Login page | ![login](screenshots/login.png) |
-| Two users chatting | ![chat](screenshots/chat.png) |
+| Two users chatting | ![chat](screenshots/chat1.png) ![chat](screenshots/chat2.png) |
 | Message burning | ![burning](screenshots/burning.png) |
 | Empty messages table after burn | ![db](screenshots/db-empty.png) |
-| Load test result | ![load](screenshots/loadtest.png) |
